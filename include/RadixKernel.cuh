@@ -243,7 +243,7 @@ __global__ void Radix2Mult2nd(cuComplex* in, const unsigned int N, unsigned int 
 {
   unsigned int x[SIZE2];
   cuComplex y[SIZE2];
-  __shared__ cuComplex shared_data[TILE_SIZE * SIZE2 * SIZE2 * SIZE2 * SIZE2];
+  __shared__ cuComplex shared_data[TILE_SIZE * SIZE2];
 
   for (int ii = bx * blockDim.x + tx;
        ii < N / SIZE2;
