@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+#PBS -N FFTTest
+#PBS -q class
+#PBS -l select=1:gpuname=ampere:ngpus=1:ncpus=1:mpiprocs=1:mem=2000mb
+#PBS -l walltime=1:00:00
+#PBS -j oe
+#PBS -o FinalProj.FFTTest.qsub_out
+
+#change into submission direcotry 
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+cd $SCRIPT_DIR
+echo "CURDIR: $SCRIPT_DIR"
+
+cd $PBS_O_WORKDIR
+SCRIPT_DIR=$PWD
+SUBMISSIONNAME=$(basename "$PWD")_script
+
+echo "CURDIR: $SCRIPT_DIR"
+echo "SUBMISSIONNAME: $SUBMISSIONNAME"
+
+# list NVIDIA cards, make clean, load the cuda module, make, and run main
+lspci -vvv | grep "NVIDIA" && \
+	make clean && \
+	module load cuda && \
+	make build && \
+	./install/bin/Radix2Test
+	
