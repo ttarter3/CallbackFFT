@@ -7,6 +7,8 @@ https://github.com/ttarter3/CallbackFFT.git
 
 to build and run the code on a ASA-X type
 ```
+git submodulate update --init
+
 make sgen
 make run_s
 ```
@@ -19,6 +21,8 @@ to build and run the code on Voyager1 type
 ```
 
 ```
+git submodulate update --init
+
 make pgen
 make run_p
 ```
