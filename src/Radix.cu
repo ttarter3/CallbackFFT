@@ -5,6 +5,7 @@
 #include "RadixKernel.cuh"
 #include "gpuErrorChk.h"
 #include "Define.h"
+#include "Timer.hpp"
 
 // Standard Headers
 #include <iostream>
@@ -106,10 +107,6 @@ void Radix<T>::GPUKernel(cuComplex* in, const unsigned int N, const unsigned int
             k = 2 * TPB_512;
 
             Radix2Mult2nd<<<dim3((N + TPB_512 - 1) / TPB_512 * 2, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, k);
-
-            for (k = k; k < N; k *= SIZE2) {
-              Radix2Mult<<< dim3((N + TPB_512 - 1) / TPB_512, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, k);
-            }
           } else {
             std::cout << "Error: Radix "<< rad << " must statify 0 == " << remainder(log(pow(2, M)), log(2.0)) << std::endl;
           }
@@ -177,22 +174,12 @@ template<typename T>
 void Radix<T>::Execute(int alg) {
   std::cout << __FUNCTION__ << std::endl;
 
-  cudaEvent_t start, stop;
-  cudaEventCreate(&start);
-  cudaEventCreate(&stop);
-  
-  cudaEventRecord(start);
-
+  // Timer ti;
+  // ti.start();
   GPUKernel(d_x_, N_, M_, alg);
-
-  cudaEventRecord(stop);
-  cudaEventSynchronize(stop);
-  float milliseconds = 0;
-  cudaEventElapsedTime(&milliseconds, start, stop);
+  // ti.stop();
+  // printf("Alg %d: Operating Time(millsec): %f\n", alg, ti.elapsedTime_ms());
   
-  printf("Alg %d: Operating Time(millsec): %f\n", alg, milliseconds);
-  
-	// Wait for kernel to finish
 	gpuErrchk( cudaGetLastError() );
 	gpuErrchk( cudaDeviceSynchronize() );
 };

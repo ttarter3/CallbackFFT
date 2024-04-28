@@ -4,12 +4,16 @@
 #include "CuMath.cuh"
 #include "Define.h"
 
-// Standard Headers
 #include <cuda_runtime.h>
+#include <cooperative_groups.h>
+
+// Standard Headers
 #include <stdio.h>
 #include <math.h>
 #include "cuComplex.h"
 #include <cmath>
+
+
 
 #define tx threadIdx.x
 #define ty threadIdx.y
@@ -20,6 +24,8 @@
 
 #define PRINTIDX 6
 #define X 32
+
+namespace cg = cooperative_groups;
 
 __global__ void Radix2ShiftIgnore(cuComplex* in,const unsigned int N, unsigned int M)
 {
@@ -243,37 +249,40 @@ __global__ void Radix2Mult2nd(cuComplex* in, const unsigned int N, unsigned int 
 {
   unsigned int x[SIZE2];
   cuComplex y[SIZE2];
-  __shared__ cuComplex shared_data[TILE_SIZE * SIZE2];
+  // __shared__ cuComplex shared_data[TILE_SIZE * SIZE2];
+  cuComplex local;
 
-  for (int ii = bx * blockDim.x + tx;
-       ii < N / SIZE2;
-       ii += blockDim.x * gridDim.x) {
-      for (int jj = 0; jj <= SIZE2; jj++) {
-        shared_data[2 * tx + jj] = in[2 * ii + jj];
-      }
-      __syncthreads();
+  cg::grid_group   g = cg::this_grid();
+  // printf("%d\n", g.is_valid());
+  cg::sync(g);
 
-      for (M = M ; M <= TILE_SIZE; M *= 2) {
-        for (int jj = 0; jj < SIZE2; jj++) {
-          x[jj] = (ii / M) * SIZE2 * M + ii % M + jj * M;
-        }
 
-        float angle = -2 * M_PI * ((N / (M * SIZE2)) * ii - (N / SIZE2) * (ii / M)) / N;
-        cuComplex weight = make_cuComplex(cos(angle), sin(angle));
+  // for (int ii = bx * blockDim.x + tx;
+  //      ii < N / SIZE2;
+  //      ii += blockDim.x * gridDim.x) {
+      
+  //     x[0] = (ii / M) * SIZE2 * M + ii % M;
+  //     local = in[x[0]];
 
-        y[0] = shared_data[x[0] % (SIZE2 * TILE_SIZE)];
-        y[1] = Mult(shared_data[x[1] % (SIZE2 * TILE_SIZE)], weight);
 
-        shared_data[x[0] % (SIZE2 * TILE_SIZE)] = Add(y[0], y[1]);
-        shared_data[x[1] % (SIZE2 * TILE_SIZE)] = Sub(y[0], y[1]);
-      }
-      __syncthreads();
+  //     for (M = M ; M < N; M *= SIZE2) {
+  //       // x[1] = (ii / M) * SIZE2 * M + ii % M + 1 * M;
 
-      in[x[0]] = shared_data[x[0] % (SIZE2 * TILE_SIZE)];
-      in[x[1]] = shared_data[x[1] % (SIZE2 * TILE_SIZE)];
+  //       // float angle = -2 * M_PI * ((N / (M * SIZE2)) * ii - (N / SIZE2) * (ii / M)) / N;
+  //       // cuComplex weight = make_cuComplex(cos(angle), sin(angle));
 
-      __syncthreads();
-  }
+  //       // y[0] =      local;
+  //       // y[1] = Mult(in[x[1]], weight);
+
+  //       // local    = Add(y[0], y[1]);
+  //       // in[x[1]] = Sub(y[0], y[1]);
+
+  //       // in[x[0]] = local;
+        
+  //     }
+      
+  // }
+  
 }
 
 // __global__ void Radix2_2(cuComplex* in, const unsigned int N, unsigned int M) {

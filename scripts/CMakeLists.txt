@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 SET(ProjectId "Scripts")
-project(${ProjectId})
+project(${ProjectId} CUDA CXX)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -46,7 +46,7 @@ foreach( testsourcefile ${APP_SOURCES} )
 
     target_link_libraries(${testname} CUDA::cudart)
     target_link_libraries(${testname} CUDA::cublas)
-    target_link_libraries(${testname} CUDA::cufft)
+    target_link_libraries(${testname} CUDA::cufft)    
 
     link_directories(${CMAKE_SOURCE_DIR}/install/lib)
     link_directories(${CMAKE_SOURCE_DIR}/build)
