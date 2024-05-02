@@ -16,6 +16,8 @@
 
 template<typename T>
 void Radix<T>::GPUKernel(cuComplex* in, const unsigned int N, const unsigned int M, int alg) {
+  int coalescence;
+  
   int rad = 0;
   switch (alg) {
         case 1:
@@ -24,7 +26,7 @@ void Radix<T>::GPUKernel(cuComplex* in, const unsigned int N, const unsigned int
             // Radix2<<<dim3((N + TPB_512 - 1) / TPB_512, 1, 1), TPB_512 >>>(in, N, M);
             Radix2Shift<<<dim3((N + TPB_512 - 1) / TPB_512, 1, 1), dim3(TPB_512,1,1) >>>(in, N, M);
             for (int k = 1; k <  N; k *= SIZE2) {
-              Radix2Mult<<<dim3((N + TPB_512 - 1) / TPB_512, 1, 1), dim3(TPB_512,1,1) >>>(in, N, k);
+              Radix2Mult<<<dim3((N + TPB_512 - 1) / TPB_512 / rad, 1, 1), dim3(TPB_512,1,1) >>>(in, N, k);
             }
           } else {
             std::cout << "Error: Radix "<< rad << " must statify 0 == " << remainder(log(pow(2, M)), log(2.0)) << std::endl;
@@ -36,7 +38,7 @@ void Radix<T>::GPUKernel(cuComplex* in, const unsigned int N, const unsigned int
             // Radix4<<<dim3((N + TPB_512 - 1) / TPB_512, 1, 1), TPB_512 >>>(in, N, M);
           Radix4Shift<<<dim3((N + TPB_512 - 1) / TPB_512, 1, 1), dim3(TPB_512,1,1) >>>(in, N, M);
           for (int k = 1; k < N; k *= SIZE4) {
-            Radix4Mult<<<dim3((N + TPB_512 - 1) / TPB_512, 1, 1), dim3(TPB_512,1,1) >>>(in, N, k);
+            Radix4Mult<<<dim3((N + TPB_512 - 1) / TPB_512 / rad, 1, 1), dim3(TPB_512,1,1) >>>(in, N, k);
           }
           } else {
             std::cout << "Error: Radix "<< rad << " must statify 0 == " << abs(remainderl(logl(powl(2, M)), logl(4.0))) << std::endl;
@@ -48,7 +50,7 @@ void Radix<T>::GPUKernel(cuComplex* in, const unsigned int N, const unsigned int
             // Radix8<<< dim3((N + TPB_512 - 1) / TPB_512, 1, 1), TPB_512 >>>(in, N, M);
             Radix8Shift<<< dim3((N + TPB_512 - 1) / TPB_512, 1, 1), dim3(TPB_512,1,1) >>>(in, N, M);
             for (int k = 1; k < N; k *= SIZE8)
-              Radix8Mult<<< dim3((N + TPB_512 - 1) / TPB_512, 1, 1), dim3(TPB_512,1,1) >>>(in, N, k);
+              Radix8Mult<<< dim3((N + TPB_512 - 1) / TPB_512 / rad, 1, 1), dim3(TPB_512,1,1) >>>(in, N, k);
 
           } else {
             std::cout << "Error: Radix "<< rad << " must statify 0 == " << remainder(log(pow(2, M)), log(8.0)) << std::endl;
@@ -58,12 +60,12 @@ void Radix<T>::GPUKernel(cuComplex* in, const unsigned int N, const unsigned int
           rad = 2;
           if (abs(remainderl(logl(powl(2, M)), logl(2.0))) < 1.0E-5 && M > 9) {
             // Radix2_2<<< dim3((N + TPB_512 - 1) / TPB_512, 1, 1), TPB_512 >>>(in, N, M);
-            Radix2Shift<<< dim3((N + TPB_512 - 1) / TPB_512, 1, 1), TPB_512 >>>(in, N, M);
+            Radix2Shift<<< dim3((N + TPB_512 - 1) / TPB_512, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, M);
 
             unsigned int k = SIZE2 * SIZE2;
-            Radix2MultShared<<< dim3((N + TPB_512 - 1) / TPB_512, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, k);
+            Radix2MultShared<<< dim3((N + TPB_512 - 1) / TPB_512 / rad, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, k);
             for (int k = 1; k <  N; k *= SIZE2) {
-              Radix2Mult<<< dim3((N + TPB_512 - 1) / TPB_512, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, k);
+              Radix2Mult<<< dim3((N + TPB_512 - 1) / TPB_512 / rad, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, k);
             }
           } else {
             std::cout << "Error: Radix "<< rad << " must statify 0 == " << remainder(log(pow(2, M)), log(2.0)) << std::endl;
@@ -75,7 +77,7 @@ void Radix<T>::GPUKernel(cuComplex* in, const unsigned int N, const unsigned int
             // Radix2<<<dim3((N + TPB_512 - 1) / TPB_512, 1, 1), TPB_512 >>>(in, N, M);
             Radix2Shift<<<dim3((N + TPB_512 - 1) / TPB_512, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, M);
             for (int k = 1; k <  N; k *= SIZE2) {
-              Radix2Mult2XThread<<<dim3((N + TPB_512 - 1) / TPB_512 * 2, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, k);
+              Radix2Mult2XThread<<<dim3((N + TPB_512 - 1) / TPB_512, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, k);
             }
           } else {
             std::cout << "Error: Radix "<< rad << " must statify 0 == " << remainder(log(pow(2, M)), log(2.0)) << std::endl;
@@ -85,13 +87,13 @@ void Radix<T>::GPUKernel(cuComplex* in, const unsigned int N, const unsigned int
           rad = 2;
           if (abs(remainderl(logl(powl(2, M)), logl(2.0))) < 1.0E-5) {
             // Radix2<<<dim3((N + TPB_512 - 1) / TPB_512, 1, 1), TPB_512 >>>(in, N, M);
-            Radix2Shift<<<dim3((N + TPB_512 - 1) / TPB_512, 1, 1), TPB_512 >>>(in, N, M);
+            Radix2Shift<<<dim3((N + TPB_512 - 1) / TPB_512, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, M);
             int k = 1;
-            Radix2Mult1st<<<dim3((N + TPB_512 - 1) / TPB_512 * 2, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, k);
+            Radix2Mult1st<<<dim3((N + TPB_512 - 1) / TPB_512 / rad, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, k);
             k = 2 * TPB_512;
 
             for (k = k; k < N; k *= SIZE2) {
-              Radix2Mult<<< dim3((N + TPB_512 - 1) / TPB_512, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, k);
+              Radix2Mult<<< dim3((N + TPB_512 - 1) / TPB_512 / rad, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, k);
             }
           } else {
             std::cout << "Error: Radix "<< rad << " must statify 0 == " << remainder(log(pow(2, M)), log(2.0)) << std::endl;
@@ -99,16 +101,32 @@ void Radix<T>::GPUKernel(cuComplex* in, const unsigned int N, const unsigned int
           break;
         case 7:
           rad = 2;
-          if (abs(remainderl(logl(powl(2, M)), logl(2.0))) < 1.0E-5) {
-            // Radix2<<<dim3((N + TPB_512 - 1) / TPB_512, 1, 1), TPB_512 >>>(in, N, M);
-            Radix2Shift<<<dim3((N + TPB_512 - 1) / TPB_512, 1, 1), TPB_512 >>>(in, N, M);
-            int k = 1;
-            Radix2Mult1st<<<dim3((N + TPB_512 - 1) / TPB_512 * 2, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, k);
-            k = 2 * TPB_512;
+          // Radix2Mult2XThread<<<dim3((N + TPB_512 - 1) / TPB_512 * 2, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, k);
+          coalescence = (N / SIZE2 + SMALL_SET - 1) / SMALL_SET / BIG_SET; 
 
-            Radix2Mult2nd<<<dim3((N + TPB_512 - 1) / TPB_512 * 2, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, k);
+          if ((abs(remainderl(logl(powl(2, M)), logl(2.0))) < 1.0E-5) && (coalescence <= MAX_COALESCENCE) && (N / SIZE2 - coalescence * BIG_SET * SMALL_SET < 1)) {
+            // Radix2<<<dim3((N + TPB_512 - 1) / TPB_512, 1, 1), TPB_512 >>>(in, N, M);
+            Radix2Shift<<<dim3((N + TPB_512 - 1) / TPB_512, 1, 1), dim3(TPB_512, 1, 1) >>>(in, N, M);
+            int k = 1;
+            Radix2Mult1st<<<dim3((N + TPB_512 - 1) / TPB_512 / rad, 1, 1), dim3(TPB_512, 1, 1)>>>(in, N, k);
+            k = 2 * TPB_512;
+            
+
+            void *kernelArgs[] = {(void*)&in, (void*)&N, (void*)&k , (void*) &coalescence};
+            gpuErrchk(cudaLaunchCooperativeKernel((void*) Radix2Mult2nd
+                                                  , dim3(BIG_SET, 1, 1) // dim3((N + TPB_64 - 1) / TPB_64 * 2, 1, 1)
+                                                  , dim3(SMALL_SET, 1, 1) // dim3(TPB_64, 1, 1)
+                                                  , kernelArgs
+                                                  , NULL
+                                                  , NULL));
           } else {
-            std::cout << "Error: Radix "<< rad << " must statify 0 == " << remainder(log(pow(2, M)), log(2.0)) << std::endl;
+            if (abs(remainderl(logl(powl(2, M)), logl(2.0))) > 1.0E-5)
+              std::cout << "Error: Radix "<< rad << " must statify 0 == " << remainder(log(pow(2, M)), log(2.0)) << std::endl;
+            else if (coalescence >= MAX_COALESCENCE) 
+              std::cout << "Error: Coalese(" << coalescence << ") < MAX COAL (" << MAX_COALESCENCE << ")" << std::endl;
+            else {
+              std::cout << "Error: Radix "<< rad << " -> N(" << N * SIZE2 << ") minus coalenscen(" << coalescence << ") * BIG_SET * SMALL_SET: " << N * SIZE2 - coalescence * BIG_SET * SMALL_SET << std::endl;
+            }
           }
           break;
         
@@ -174,11 +192,12 @@ template<typename T>
 void Radix<T>::Execute(int alg) {
   std::cout << __FUNCTION__ << std::endl;
 
-  // Timer ti;
-  // ti.start();
+  Timer ti;
+  ti.start();
   GPUKernel(d_x_, N_, M_, alg);
-  // ti.stop();
-  // printf("Alg %d: Operating Time(millsec): %f\n", alg, ti.elapsedTime_ms());
+  ti.stop();
+  printf("Alg %d: ", alg);
+  printf("Operating Time(millsec): %f\n", ti.elapsedTime_ms());
   
 	gpuErrchk( cudaGetLastError() );
 	gpuErrchk( cudaDeviceSynchronize() );

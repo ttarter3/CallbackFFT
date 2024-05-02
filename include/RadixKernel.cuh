@@ -12,7 +12,7 @@
 #include <math.h>
 #include "cuComplex.h"
 #include <cmath>
-
+#include <assert.h>
 
 
 #define tx threadIdx.x
@@ -24,6 +24,7 @@
 
 #define PRINTIDX 6
 #define X 32
+#define PI 3.141592
 
 namespace cg = cooperative_groups;
 
@@ -86,6 +87,8 @@ __global__ void Radix2MultIgnore(cuComplex* in, const unsigned int N, unsigned i
 
 __global__ void Radix2Shift(cuComplex* in,const unsigned int N, unsigned int M)
 {
+
+  __shared__ cuComplex shared_data[TILE_SIZE];
   for (int ii = bx * blockDim.x + tx;
        ii < N;
        ii += blockDim.x * gridDim.x) {
@@ -98,7 +101,11 @@ __global__ void Radix2Shift(cuComplex* in,const unsigned int N, unsigned int M)
     swap_idx = temp >> (X - M);
 
     if (ii < swap_idx) {
-      Swap(in[swap_idx], in[ii]);
+      shared_data[ii % TILE_SIZE] = in[ii];
+      in[ii] = in[swap_idx];
+      in[swap_idx] = shared_data[ii % TILE_SIZE];
+
+      // Swap(in[swap_idx], in[ii]);
     }
   }
 }
@@ -107,6 +114,8 @@ __global__ void Radix2Mult(cuComplex* in, const unsigned int N, unsigned int M)
 {
   unsigned int x[SIZE2];
   cuComplex y[SIZE2];
+
+  assert(bx * blockDim.x + tx < N / SIZE2);
 
   for (int ii = bx * blockDim.x + tx;
        ii < N / SIZE2;
@@ -245,44 +254,75 @@ __global__ void Radix2Mult1st(cuComplex* in, const unsigned int N, unsigned int 
   }
 }
 
-__global__ void Radix2Mult2nd(cuComplex* in, const unsigned int N, unsigned int M)
+extern "C" __global__ void Radix2Mult2nd(cuComplex* in, const unsigned int N, unsigned int M , int coalescence)
 {
-  unsigned int x[SIZE2];
+  unsigned int x[MAX_COALESCENCE];
+  bool valid[MAX_COALESCENCE];
+  unsigned int x_1;
   cuComplex y[SIZE2];
-  // __shared__ cuComplex shared_data[TILE_SIZE * SIZE2];
-  cuComplex local;
 
-  cg::grid_group   g = cg::this_grid();
-  // printf("%d\n", g.is_valid());
-  cg::sync(g);
-
-
-  // for (int ii = bx * blockDim.x + tx;
-  //      ii < N / SIZE2;
-  //      ii += blockDim.x * gridDim.x) {
-      
-  //     x[0] = (ii / M) * SIZE2 * M + ii % M;
-  //     local = in[x[0]];
-
-
-  //     for (M = M ; M < N; M *= SIZE2) {
-  //       // x[1] = (ii / M) * SIZE2 * M + ii % M + 1 * M;
-
-  //       // float angle = -2 * M_PI * ((N / (M * SIZE2)) * ii - (N / SIZE2) * (ii / M)) / N;
-  //       // cuComplex weight = make_cuComplex(cos(angle), sin(angle));
-
-  //       // y[0] =      local;
-  //       // y[1] = Mult(in[x[1]], weight);
-
-  //       // local    = Add(y[0], y[1]);
-  //       // in[x[1]] = Sub(y[0], y[1]);
-
-  //       // in[x[0]] = local;
-        
-  //     }
-      
-  // }
+  cg::grid_group grid = cg::this_grid();
+  cg::thread_group thread = cg::this_thread_block();
   
+  for (int xx = (bx * coalescence) * blockDim.x + tx;
+       xx < N / SIZE2;
+       xx += blockDim.x * gridDim.x) {
+    
+    int ii, jj;
+    // for (jj = 0; jj < coalescence; jj++) {
+    //   ii = (bx * coalescence + jj) * blockDim.x + tx;
+    //   x[jj] = (ii / M) * SIZE2 * M + ii % M;
+
+    //   valid[jj] = true;
+
+    //   // if (ii >= N / 2) {
+    //   //   printf("UC: %d\n", ii);
+    //   // }
+    // }
+    // cg::sync(grid);
+
+    for (M = M ; M < N; M *= SIZE2) {
+      for (jj = 0; jj < coalescence; jj++) {
+        ii = (bx * coalescence + jj) * blockDim.x + tx;
+        // if (bx == 392 && tx == 1 && jj == 0) {
+        //   printf("%d %d %d %d %d %d %d\n", (ii / M) * SIZE2 * M + ii % M + 0 * M, (ii / M) * SIZE2 * M + ii % M + 1 * M, bx, coalescence, jj, blockDim.x, tx);
+        // }
+
+        // if (x[jj] != (ii / M) * SIZE2 * M + ii % M + 0 * M) {
+        //   // valid[jj] = false;
+        //   printf("%d %d %d %d %d %d\n", M, x[jj], (ii / M) * SIZE2 * M + ii % M + 0 * M, bx, jj, tx);
+        // }
+        x[jj] = (ii / M) * SIZE2 * M + ii % M + 0 * M;
+        x_1   = (ii / M) * SIZE2 * M + ii % M + 1 * M;
+
+        // if (bx == 0 && jj == 0 && tx == 0) printf("%d %d %f\n", x[jj], x_1);
+
+        // if (ii >= N / 2) {
+        //   printf("UC: %d\n", x[jj]);
+        // }
+
+
+        float angle = -2 * M_PI * ((N / (M * SIZE2)) * ii - (N / SIZE2) * (ii / M)) / N;
+        cuComplex weight = make_cuComplex(cos(angle), sin(angle));
+        // if (bx == BIG_SET - 1 && tx == SMALL_SET - 1 && M == 1024) printf("%d %d %f\n", jj, x[jj], in[x[jj]]);
+        // if (bx == 0 && tx == 0 && M == 1024) printf("%d %d %f\n", jj, x[jj], in[x[jj]]);
+
+        y[0] =      in[x[jj]]; //shared_data[tx * coalescence + jj];
+        y[1] = Mult(in[x_1], weight);
+
+        // if (bx == BIG_SET - 1 && tx == SMALL_SET - 1 && M == 1024) printf("%d %d %f\n", jj, x[jj], in[x[jj]]);
+        in[x[jj]] = Add(y[0], y[1]);
+        in[x_1]   = Sub(y[0], y[1]);
+      }
+      cg::sync(grid);
+    } 
+
+    // for (jj = 0; jj < coalescence; jj++) {
+    //   if (!valid[jj]) {
+    //     printf("%d, ", (bx * coalescence + jj) * blockDim.x + tx);
+    //   }
+    // }
+  }
 }
 
 // __global__ void Radix2_2(cuComplex* in, const unsigned int N, unsigned int M) {
@@ -318,6 +358,8 @@ __global__ void Radix4Shift(cuComplex* in,const unsigned int N, unsigned int M)
 __global__ void Radix4Mult(cuComplex* in, const unsigned int N, const unsigned int M) {
   unsigned int x[SIZE4];
   cuComplex y[SIZE4];
+
+  assert(bx * blockDim.x + tx < N / SIZE4);
 
   for (int ii = bx * blockDim.x + tx;
        ii < N / SIZE4;
@@ -431,6 +473,40 @@ __global__ void Radix8Shift(cuComplex* in,const unsigned int N, unsigned int M)
     if (ii < swap_idx) {
       Swap(in[swap_idx], in[ii]);
     }
+
+//SMALL SCALE
+    // int n = log2(N);
+    // unsigned int banks = N / 8;
+    // unsigned int ba = ii % banks;
+    // // unsigned int bi = ii * 8 / N;
+    // unsigned int i = ii % 8;
+
+    // unsigned int bi = i;
+    // for (int t = 0; t < (n + 3 - 1) / 3 - 1; t++) {
+    //   int sum = 0;
+    //   sum += ((ba >> (n - 4 - 3 * t)) & 0x1) * pow(2, 2);
+    //   sum += ((ba >> (n - 5 - 3 * t)) & 0x1) * pow(2, 1);
+    //   sum += ((ba >> (n - 6 - 3 * t)) & 0x1) * pow(2, 0);
+      
+    //   bi += sum;
+    // }
+    // bi = bi % 8;
+    
+
+
+//CONTROVERSIAL SCALE
+    // unsigned int swap_idx = ii;
+    // unsigned long int temp = 0;
+    // for (int jj = 0; jj < 32; jj += 3) {
+    //   temp |= (((swap_idx >> (jj + 2)) & 0x01) << (X - 1 - jj));
+    //   temp |= (((swap_idx >> (jj + 1)) & 0x01) << (X - 2 - jj));
+    //   temp |= (((swap_idx >> (jj + 0)) & 0x01) << (X - 3 - jj));
+    // }
+    // swap_idx = temp >> (32 - M);
+
+    // if (ii < swap_idx) {
+    //   Swap(in[swap_idx], in[ii]);
+    // }
   }
 }
 // This kernel performs the butterfly operations for each stage of the radix-4 FFT.
@@ -460,6 +536,7 @@ __global__ void Radix8Mult(cuComplex* in, const unsigned int N, const unsigned i
     const float sq2 = sqrt(2.0) / 2.0;
     in[x[0]] = make_cuComplex(y[0].x + y[1].x + y[2].x + y[3].x + y[4].x + y[5].x + y[6].x + y[7].x
                                  , y[0].y + y[1].y + y[2].y + y[3].y + y[4].y + y[5].y + y[6].y + y[7].y);
+
 
     in[x[1]] = y[0];
     in[x[1]] = Add(Mult(make_cuComplex(   0.0,   -1.0), y[1]), in[x[1]]);
@@ -523,6 +600,71 @@ __global__ void Radix8Mult(cuComplex* in, const unsigned int N, const unsigned i
     in[x[7]] = Add(Mult(make_cuComplex(  -sq2,  -sq2), y[5]), in[x[7]]);
     in[x[7]] = Add(Mult(make_cuComplex(   0.0,  -1.0), y[6]), in[x[7]]);
     in[x[7]] = Add(Mult(make_cuComplex(   sq2,  -sq2), y[7]), in[x[7]]);
+
+/*
+    in[x[1]] = y[0];
+    in[x[1]] = Add(Mult(make_cuComplex(cos(2 * PI * 1 / 8), sin(2 * PI * 1 / 8)), y[1]), in[x[1]]);
+    in[x[1]] = Add(Mult(make_cuComplex(cos(2 * PI * 2 / 8), sin(2 * PI * 2 / 8)), y[2]), in[x[1]]);
+    in[x[1]] = Add(Mult(make_cuComplex(cos(2 * PI * 3 / 8), sin(2 * PI * 3 / 8)), y[3]), in[x[1]]);
+    in[x[1]] = Add(Mult(make_cuComplex(cos(2 * PI * 4 / 8), sin(2 * PI * 4 / 8)), y[4]), in[x[1]]);
+    in[x[1]] = Add(Mult(make_cuComplex(cos(2 * PI * 5 / 8), sin(2 * PI * 5 / 8)), y[5]), in[x[1]]);
+    in[x[1]] = Add(Mult(make_cuComplex(cos(2 * PI * 6 / 8), sin(2 * PI * 6 / 8)), y[6]), in[x[1]]);
+    in[x[1]] = Add(Mult(make_cuComplex(cos(2 * PI * 7 / 8), sin(2 * PI * 7 / 8)), y[7]), in[x[1]]);
+
+    in[x[2]] = y[0];
+    in[x[2]] = Add(Mult(make_cuComplex(cos(2 * PI * 2 / 8), sin(2 * PI * 2 / 8)), y[1]), in[x[2]]);
+    in[x[2]] = Add(Mult(make_cuComplex(cos(2 * PI * 4 / 8), sin(2 * PI * 4 / 8)), y[2]), in[x[2]]);
+    in[x[2]] = Add(Mult(make_cuComplex(cos(2 * PI * 6 / 8), sin(2 * PI * 6 / 8)), y[3]), in[x[2]]);
+    in[x[2]] = Add(Mult(make_cuComplex(cos(2 * PI * 0 / 8), sin(2 * PI * 0 / 8)), y[4]), in[x[2]]);
+    in[x[2]] = Add(Mult(make_cuComplex(cos(2 * PI * 2 / 8), sin(2 * PI * 2 / 8)), y[5]), in[x[2]]);
+    in[x[2]] = Add(Mult(make_cuComplex(cos(2 * PI * 4 / 8), sin(2 * PI * 4 / 8)), y[6]), in[x[2]]);
+    in[x[2]] = Add(Mult(make_cuComplex(cos(2 * PI * 6 / 8), sin(2 * PI * 6 / 8)), y[7]), in[x[2]]);
+
+    in[x[3]] = y[0];
+    in[x[3]] = Add(Mult(make_cuComplex(cos(2 * PI * 3 / 8), sin(2 * PI * 3 / 8)), y[1]), in[x[3]]);
+    in[x[3]] = Add(Mult(make_cuComplex(cos(2 * PI * 6 / 8), sin(2 * PI * 6 / 8)), y[2]), in[x[3]]);
+    in[x[3]] = Add(Mult(make_cuComplex(cos(2 * PI * 9 / 8), sin(2 * PI * 9 / 8)), y[3]), in[x[3]]);
+    in[x[3]] = Add(Mult(make_cuComplex(cos(2 * PI * 4 / 8), sin(2 * PI * 4 / 8)), y[4]), in[x[3]]);
+    in[x[3]] = Add(Mult(make_cuComplex(cos(2 * PI * 7 / 8), sin(2 * PI * 7 / 8)), y[5]), in[x[3]]);
+    in[x[3]] = Add(Mult(make_cuComplex(cos(2 * PI * 2 / 8), sin(2 * PI * 2 / 8)), y[6]), in[x[3]]);
+    in[x[3]] = Add(Mult(make_cuComplex(cos(2 * PI * 6 / 8), sin(2 * PI * 6 / 8)), y[7]), in[x[3]]);
+
+    in[x[4]] = y[0];
+    in[x[4]] = Add(Mult(make_cuComplex(cos(2 * PI * 4 / 8), sin(2 * PI * 4 / 8)), y[1]), in[x[4]]);
+    in[x[4]] = Add(Mult(make_cuComplex(cos(2 * PI * 0 / 8), sin(2 * PI * 0 / 8)), y[2]), in[x[4]]);
+    in[x[4]] = Add(Mult(make_cuComplex(cos(2 * PI * 4 / 8), sin(2 * PI * 4 / 8)), y[3]), in[x[4]]);
+    in[x[4]] = Add(Mult(make_cuComplex(cos(2 * PI * 0 / 8), sin(2 * PI * 0 / 8)), y[4]), in[x[4]]);
+    in[x[4]] = Add(Mult(make_cuComplex(cos(2 * PI * 4 / 8), sin(2 * PI * 4 / 8)), y[5]), in[x[4]]);
+    in[x[4]] = Add(Mult(make_cuComplex(cos(2 * PI * 0 / 8), sin(2 * PI * 0 / 8)), y[6]), in[x[4]]);
+    in[x[4]] = Add(Mult(make_cuComplex(cos(2 * PI * 4 / 8), sin(2 * PI * 4 / 8)), y[7]), in[x[4]]);
+
+    in[x[5]] = y[0];
+    in[x[5]] = Add(Mult(make_cuComplex(cos(2 * PI * 5 / 8), sin(2 * PI * 5 / 8)), y[1]), in[x[5]]);
+    in[x[5]] = Add(Mult(make_cuComplex(cos(2 * PI * 2 / 8), sin(2 * PI * 2 / 8)), y[2]), in[x[5]]);
+    in[x[5]] = Add(Mult(make_cuComplex(cos(2 * PI * 7 / 8), sin(2 * PI * 7 / 8)), y[3]), in[x[5]]);
+    in[x[5]] = Add(Mult(make_cuComplex(cos(2 * PI * 4 / 8), sin(2 * PI * 4 / 8)), y[4]), in[x[5]]);
+    in[x[5]] = Add(Mult(make_cuComplex(cos(2 * PI * 1 / 8), sin(2 * PI * 1 / 8)), y[5]), in[x[5]]);
+    in[x[5]] = Add(Mult(make_cuComplex(cos(2 * PI * 6 / 8), sin(2 * PI * 6 / 8)), y[6]), in[x[5]]);
+    in[x[5]] = Add(Mult(make_cuComplex(cos(2 * PI * 3 / 8), sin(2 * PI * 3 / 8)), y[7]), in[x[5]]);
+
+    in[x[6]] = y[0];
+    in[x[6]] = Add(Mult(make_cuComplex(cos(2 * PI * 6 / 8), sin(2 * PI * 6 / 8)), y[1]), in[x[6]]);
+    in[x[6]] = Add(Mult(make_cuComplex(cos(2 * PI * 4 / 8), sin(2 * PI * 4 / 8)), y[2]), in[x[6]]);
+    in[x[6]] = Add(Mult(make_cuComplex(cos(2 * PI * 2 / 8), sin(2 * PI * 2 / 8)), y[3]), in[x[6]]);
+    in[x[6]] = Add(Mult(make_cuComplex(cos(2 * PI * 0 / 8), sin(2 * PI * 0 / 8)), y[4]), in[x[6]]);
+    in[x[6]] = Add(Mult(make_cuComplex(cos(2 * PI * 6 / 8), sin(2 * PI * 6 / 8)), y[5]), in[x[6]]);
+    in[x[6]] = Add(Mult(make_cuComplex(cos(2 * PI * 4 / 8), sin(2 * PI * 4 / 8)), y[6]), in[x[6]]);
+    in[x[6]] = Add(Mult(make_cuComplex(cos(2 * PI * 2 / 8), sin(2 * PI * 2 / 8)), y[7]), in[x[6]]);
+
+    in[x[7]] = y[0];
+    in[x[7]] = Add(Mult(make_cuComplex(cos(2 * PI * 7 / 8), sin(2 * PI * 7 / 8)), y[1]), in[x[7]]);
+    in[x[7]] = Add(Mult(make_cuComplex(cos(2 * PI * 6 / 8), sin(2 * PI * 6 / 8)), y[2]), in[x[7]]);
+    in[x[7]] = Add(Mult(make_cuComplex(cos(2 * PI * 5 / 8), sin(2 * PI * 5 / 8)), y[3]), in[x[7]]);
+    in[x[7]] = Add(Mult(make_cuComplex(cos(2 * PI * 4 / 8), sin(2 * PI * 4 / 8)), y[4]), in[x[7]]);
+    in[x[7]] = Add(Mult(make_cuComplex(cos(2 * PI * 3 / 8), sin(2 * PI * 3 / 8)), y[5]), in[x[7]]);
+    in[x[7]] = Add(Mult(make_cuComplex(cos(2 * PI * 2 / 8), sin(2 * PI * 2 / 8)), y[6]), in[x[7]]);
+    in[x[7]] = Add(Mult(make_cuComplex(cos(2 * PI * 1 / 8), sin(2 * PI * 1 / 8)), y[7]), in[x[7]]);
+*/
   }
 }
 
@@ -533,3 +675,70 @@ __global__ void Radix8Mult(cuComplex* in, const unsigned int N, const unsigned i
 // }
 
 #endif //RADIX2KERNEL_CUH
+
+/*
+
+    in[x[1]] = y[0];
+    in[x[1]] = Add(Mult(make_cuComplex(   0.0,   -1.0), y[1]), in[x[1]]);
+    in[x[1]] = Add(Mult(make_cuComplex(  -1.0,    0.0), y[2]), in[x[1]]);
+    in[x[1]] = Add(Mult(make_cuComplex(   0.0,    1.0), y[3]), in[x[1]]);
+    in[x[1]] = Add(Mult(make_cuComplex(   1.0,    0.0), y[4]), in[x[1]]);
+    in[x[1]] = Add(Mult(make_cuComplex(   0.0,   -1.0), y[5]), in[x[1]]);
+    in[x[1]] = Add(Mult(make_cuComplex(  -1.0,    0.0), y[6]), in[x[1]]);
+    in[x[1]] = Add(Mult(make_cuComplex(   0.0,    1.0), y[7]), in[x[1]]);
+
+    in[x[2]] = y[0];
+    in[x[2]] = Add(Mult(make_cuComplex( -1.0,  0.0), y[1]), in[x[2]]);
+    in[x[2]] = Add(Mult(make_cuComplex(  1.0,  0.0), y[2]), in[x[2]]);
+    in[x[2]] = Add(Mult(make_cuComplex( -1.0,  0.0), y[3]), in[x[2]]);
+    in[x[2]] = Add(Mult(make_cuComplex(  1.0,  0.0), y[4]), in[x[2]]);
+    in[x[2]] = Add(Mult(make_cuComplex( -1.0,  0.0), y[5]), in[x[2]]);
+    in[x[2]] = Add(Mult(make_cuComplex(  1.0,  0.0), y[6]), in[x[2]]);
+    in[x[2]] = Add(Mult(make_cuComplex( -1.0,  0.0), y[7]), in[x[2]]);
+
+    in[x[3]] = y[0];
+    in[x[3]] = Add(Mult(make_cuComplex(   0.0,  1.0), y[1]), in[x[3]]);
+    in[x[3]] = Add(Mult(make_cuComplex(  -1.0,  0.0), y[2]), in[x[3]]);
+    in[x[3]] = Add(Mult(make_cuComplex(   0.0, -1.0), y[3]), in[x[3]]);
+    in[x[3]] = Add(Mult(make_cuComplex(   1.0,  0.0), y[4]), in[x[3]]);
+    in[x[3]] = Add(Mult(make_cuComplex(   0.0,  1.0), y[5]), in[x[3]]);
+    in[x[3]] = Add(Mult(make_cuComplex(  -1.0,  0.0), y[6]), in[x[3]]);
+    in[x[3]] = Add(Mult(make_cuComplex(   0.0, -1.0), y[7]), in[x[3]]);
+
+    in[x[4]] = y[0];
+    in[x[4]] = Add(Mult(make_cuComplex(sq2, -sq2), y[1]), in[x[4]]);
+    in[x[4]] = Add(Mult(make_cuComplex( 0.0, -1.0), y[2]), in[x[4]]);
+    in[x[4]] = Add(Mult(make_cuComplex(-sq2, -sq2), y[3]), in[x[4]]);
+    in[x[4]] = Add(Mult(make_cuComplex( -1.0, 0.0), y[4]), in[x[4]]);
+    in[x[4]] = Add(Mult(make_cuComplex(-sq2, sq2), y[5]), in[x[4]]);
+    in[x[4]] = Add(Mult(make_cuComplex( 0.0, 1.0), y[6]), in[x[4]]);
+    in[x[4]] = Add(Mult(make_cuComplex(sq2, sq2), y[7]), in[x[4]]);
+
+    in[x[5]] = y[0];
+    in[x[5]] = Add(Mult(make_cuComplex(  -sq2,   -sq2), y[1]), in[x[5]]);
+    in[x[5]] = Add(Mult(make_cuComplex(   0.0,  1.0), y[2]), in[x[5]]);
+    in[x[5]] = Add(Mult(make_cuComplex(   sq2,   -sq2), y[3]), in[x[5]]);
+    in[x[5]] = Add(Mult(make_cuComplex(  -1.0,   0.0), y[4]), in[x[5]]);
+    in[x[5]] = Add(Mult(make_cuComplex(   sq2,  sq2), y[5]), in[x[5]]);
+    in[x[5]] = Add(Mult(make_cuComplex(   0.0,   -1.0), y[6]), in[x[5]]);
+    in[x[5]] = Add(Mult(make_cuComplex(  -sq2,  sq2), y[7]), in[x[5]]);
+
+    in[x[6]] = y[0];
+    in[x[6]] = Add(Mult(make_cuComplex(  -sq2,  sq2), y[1]), in[x[6]]);
+    in[x[6]] = Add(Mult(make_cuComplex( 0.0,  -1.0), y[2]), in[x[6]]);
+    in[x[6]] = Add(Mult(make_cuComplex(  sq2, sq2), y[3]), in[x[6]]);
+    in[x[6]] = Add(Mult(make_cuComplex(  -1.0,  0.0), y[4]), in[x[6]]);
+    in[x[6]] = Add(Mult(make_cuComplex(  sq2,  -sq2), y[5]), in[x[6]]);
+    in[x[6]] = Add(Mult(make_cuComplex( 0.0,  1.0), y[6]), in[x[6]]);
+    in[x[6]] = Add(Mult(make_cuComplex(  -sq2, -sq2), y[7]), in[x[6]]);
+
+    in[x[7]] = y[0];
+    in[x[7]] = Add(Mult(make_cuComplex(   sq2,   sq2), y[1]), in[x[7]]);
+    in[x[7]] = Add(Mult(make_cuComplex(   0.0,   1.0), y[2]), in[x[7]]);
+    in[x[7]] = Add(Mult(make_cuComplex(  -sq2,   sq2), y[3]), in[x[7]]);
+    in[x[7]] = Add(Mult(make_cuComplex(  -1.0,   0.0), y[4]), in[x[7]]);
+    in[x[7]] = Add(Mult(make_cuComplex(  -sq2,  -sq2), y[5]), in[x[7]]);
+    in[x[7]] = Add(Mult(make_cuComplex(   0.0,  -1.0), y[6]), in[x[7]]);
+    in[x[7]] = Add(Mult(make_cuComplex(   sq2,  -sq2), y[7]), in[x[7]]);
+
+*/

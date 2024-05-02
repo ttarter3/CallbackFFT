@@ -71,21 +71,23 @@ int main(int argc, char* argv[]) {
 
     n = usable_bytes / sizeof(std::complex<TYPE>);
 
-//    n = 7; // ToDo: remove
-
     m = log2((float)n) + 1;
+
     two_pow_m = pow(2, m); // x: 1050000000
     std::cout << "n: " << n << "\tm: " << m << "\t2^M:" << two_pow_m << std::endl;
 
-
-    std::vector<int> alg_2_run({0, 1, 6, 7});
+    int iteration = 1;
     if (argc > 1) {
+      iteration = std::atoi(argv[1]);
+    }
+    std::vector<int> alg_2_run({0, 1, 2, 3, 4, 5, 6, 7});
+
+    if (argc > 2) {
       alg_2_run.clear();
-      for (int ii = 1; ii < argc; ii++) {
+      for (int ii = 2; ii < argc; ii++) {
         alg_2_run.push_back(std::atoi(argv[ii]));
       }
     }
-
 
     const char* folderPath = "./data";
     if (createFolder(folderPath)) {
@@ -95,43 +97,44 @@ int main(int argc, char* argv[]) {
     }
 
     std::vector<std::complex<TYPE>> solution(0);
-
     for (int ii_alg = 0; ii_alg < alg_2_run.size(); ii_alg++) {
-      int alg = alg_2_run[ii_alg];
+      for (int jj = 0; jj < iteration; jj++) {
+        int alg = alg_2_run[ii_alg];
 
-      std::vector<std::complex<TYPE>> x(two_pow_m);
-      generateSignal(x, f);
+        std::vector<std::complex<TYPE>> x(two_pow_m);
+        generateSignal(x, f);
 
-      Radix<TYPE> radix(n, x.size(), device);
-      radix.Load(x.data());
-      radix.Execute(alg);
-      radix.Purge(x.data());
+        Radix<TYPE> radix(n, x.size(), device);
+        radix.Load(x.data());
+        radix.Execute(alg);
+        radix.Purge(x.data());
 
-      if (alg == 0) {
-        solution.resize(x.size());
-        std::copy(x.begin(), x.end(), solution.begin());
-      } else if (solution.size() > 0) {
+        if (alg == 0) {
+          solution.resize(x.size());
+          std::copy(x.begin(), x.end(), solution.begin());
+        }
+        if (solution.size() > 0) {
+          if (solution.size() != x.size()) {
+            std::cout << "Error: Invalid Vector Size" << std::endl;
+          }
 
-        if (solution.size() != x.size()) {
-          std::cout << "Error: Invalid Vector Size" << std::endl;
+          double error = 0;
+          for (int ii = 0; ii < solution.size(); ii++) {
+            error += std::pow(std::abs(solution[ii] - x[ii]), 2);
+          }; error = std::sqrt(error);
+          if (error > 1.0E-3) {
+            std::cout << "Error: Measurment Error Greater than expected(" <<  std::setprecision(12) << error << ")" << std::endl;
+          }
         }
 
-        double error = 0;
-        for (int ii = 0; ii < solution.size(); ii++) {
-          error += std::pow(std::abs(solution[ii] - x[ii]), 2);
-        }; error = std::sqrt(error)/ solution.size();
-        if (error > 1.0E-5) {
-          std::cout << "Error: Measurment Error Greater than expected(" <<  std::setprecision(12) << error << ")" << std::endl;
-        }
+        std::string config_file = std::string(folderPath) + "/Config." + std::to_string(alg) + ".bin";
+        Vector2File(f, config_file);
+
+        FFTShift(x);
+
+        std::string freq_data_file = std::string(folderPath) + "/FreqData." + std::to_string(alg) + ".bin";
+        Vector2File(x, freq_data_file);
       }
-
-      std::string config_file = std::string(folderPath) + "/Config." + std::to_string(alg) + ".bin";
-      Vector2File(f, config_file);
-
-      FFTShift(x);
-
-      std::string freq_data_file = std::string(folderPath) + "/FreqData." + std::to_string(alg) + ".bin";
-      Vector2File(x, freq_data_file);
     }
     return 0;
 }
