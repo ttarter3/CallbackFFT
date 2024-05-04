@@ -6,6 +6,8 @@ project(${ProjectId} CUDA CXX)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CUDA_ARCHITECTURES 75 86)
+set(CMAKE_INSTALL_PREFIX "./install" CACHE STRING "FOLDER NAME")
 
 # set(ENV{CUDA_VISIBLE_DEVICES} "0")  # Set this to the index of the device you want to use
 

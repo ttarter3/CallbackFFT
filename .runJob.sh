@@ -15,7 +15,7 @@ fi
 
 case $1 in
     "p") # 
-        echo "Running RunFFT.cpp"
+        echo "Running RunFFT.cpp PBS"
 		qsub .submission.pbs
         ;;
     "s") #
@@ -57,6 +57,15 @@ if [[ $host == *"voyager1"* ]]; then
 
     # open the output file and follow th efile as new output is added
     less +F *.rjob_out*
-elif  [[ $host == *"america"* ]]; then
-    echo "Hostname does not contain 'america'."
+elif  [[ $host == *"asaxlogin2.asc.edu"* ]]; then
+    echo "Hostname:'asaxlogin2'."
+    # wait for the job to get picked up and start producing output
+
+    until [ -f *.qsub_out* ]
+    do
+            sleep 1
+    done
+
+    # open the output file and follow th efile as new output is added
+    less +F *.qsub_out*
 fi

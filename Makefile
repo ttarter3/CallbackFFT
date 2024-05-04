@@ -12,10 +12,11 @@ run_s:
 	@./.runJob.sh s
 
 pgen:
-	@mkdir -p ./install
+	@mkdir -p ./install && \
+	module load cmake && \
 	module load cuda && \
-	cmake -S . -B build -DCMAKE_INSTALL_PREFIX=./install -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON && \
-	cmake --build build -DCMAKE_INSTALL_PREFIX=./install -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON && \
+	cmake -S . -B build && \
+	cmake --build build && \
 	cmake --install build
 
 sgen:
