@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 
-
-
 # delete previous output from PBS
 rm -rf *.rjob_out*
-
-# submit the job to the queue
+rm -rf *.qsub_out*
 
 # Check if an argument is provided
 if [ "$#" -eq 0 ]; then

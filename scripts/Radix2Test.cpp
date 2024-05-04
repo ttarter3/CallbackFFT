@@ -76,7 +76,7 @@ int main(int argc, char* argv[]) {
     if (argc > 1) {
       iteration = std::atoi(argv[1]);
     }
-    std::vector<int> alg_2_run({0, 1, 2, 3, 4, 5, 6, 7});
+    std::vector<int> alg_2_run({0, 1, 2, 6});
 
     if (argc > 2) {
       alg_2_run.clear();
@@ -92,7 +92,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "Folder handling failed." << std::endl;
     }
 
-    for (m = 14; m < 26; m+=2) {
+    for (m = 12; m < 25; m+=2) {
       two_pow_m = pow(2, m); // x: 1050000000
       std::cout << "n: " << n << "\tm: " << m << "\t2^M:" << two_pow_m << std::endl;
       std::vector<std::complex<TYPE>> solution(0);

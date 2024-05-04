@@ -197,7 +197,7 @@ void Radix<T>::Execute(int alg) {
   GPUKernel(d_x_, N_, M_, alg);
   // ti.stop();
   printf("Alg %d: ", alg);
-  // printf("Operating Time(millsec): %f\n", ti.elapsedTime_ms());
+  // printf("OperatingTime_millsec %f %d\n", ti.elapsedTime_ms(), M_);
   
 	gpuErrchk( cudaGetLastError() );
 	gpuErrchk( cudaDeviceSynchronize() );

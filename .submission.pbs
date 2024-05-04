@@ -2,7 +2,7 @@
 
 #PBS -N FFTTest
 #PBS -q class
-#PBS -l select=1:gpuname=ampere:ngpus=1:ncpus=1:mpiprocs=1:mem=2000mb
+#PBS -l select=1:gpuname=hopper:ngpus=1:ncpus=1:mpiprocs=1:mem=2000mb
 #PBS -l walltime=1:00:00
 #PBS -j oe
 #PBS -o FinalProj.FFTTest.qsub_out

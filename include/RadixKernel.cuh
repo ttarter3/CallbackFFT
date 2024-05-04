@@ -115,7 +115,7 @@ __global__ void Radix2Mult(cuComplex* in, const unsigned int N, unsigned int M)
   unsigned int x[SIZE2];
   cuComplex y[SIZE2];
 
-  assert(bx * blockDim.x + tx < N / SIZE2);
+  // assert(bx * blockDim.x + tx < N / SIZE2);
 
   for (int ii = bx * blockDim.x + tx;
        ii < N / SIZE2;
@@ -216,12 +216,10 @@ __global__ void Radix2MultShared(cuComplex* in, const unsigned int N, unsigned i
 
 
 
-__global__ void Radix2Mult1st(cuComplex* in, const unsigned int N, unsigned int M)
-{
+__global__ void Radix2Mult1st(cuComplex* in, const unsigned int N, unsigned int M) {
   unsigned int x[SIZE2];
   cuComplex y[SIZE2];
-
-  __shared__ cuComplex shared_data[TILE_SIZE * SIZE2 * SIZE2];
+  __shared__ cuComplex shared_data[TILE_SIZE * SIZE2];
 
   for (int ii = bx * blockDim.x + tx;
        ii < N / SIZE2;
@@ -240,16 +238,17 @@ __global__ void Radix2Mult1st(cuComplex* in, const unsigned int N, unsigned int 
         float angle = -2 * M_PI * ((N / (M * SIZE2)) * ii - (N / SIZE2) * (ii / M)) / N;
         cuComplex weight = make_cuComplex(cos(angle), sin(angle));
 
-        y[0] =      shared_data[x[0] % (TILE_SIZE * SIZE2 * SIZE2)];
-        y[1] = Mult(shared_data[x[1] % (TILE_SIZE * SIZE2 * SIZE2)], weight);
+        y[0] =      shared_data[x[0] % (TILE_SIZE * SIZE2)];
+        y[1] = Mult(shared_data[x[1] % (TILE_SIZE * SIZE2)], weight);
 
-        shared_data[x[0] % (TILE_SIZE * SIZE2 * SIZE2)] = Add(y[0], y[1]);
-        shared_data[x[1] % (TILE_SIZE * SIZE2 * SIZE2)] = Sub(y[0], y[1]);
+        // printf("%d %d\n", x[0] % (TILE_SIZE * SIZE2), x[1] % (TILE_SIZE * SIZE2));
+        shared_data[x[0] % (TILE_SIZE * SIZE2)] = Add(y[0], y[1]);
+        shared_data[x[1] % (TILE_SIZE * SIZE2)] = Sub(y[0], y[1]);
         __syncthreads();
       }
       
-      in[x[0]] = shared_data[x[0] % (TILE_SIZE * SIZE2 * SIZE2)];
-      in[x[1]] = shared_data[x[1] % (TILE_SIZE * SIZE2 * SIZE2)];
+      in[x[0]] = shared_data[x[0] % (TILE_SIZE * SIZE2)];
+      in[x[1]] = shared_data[x[1] % (TILE_SIZE * SIZE2)];
 
       __syncthreads();
   }
@@ -360,7 +359,7 @@ __global__ void Radix4Mult(cuComplex* in, const unsigned int N, const unsigned i
   unsigned int x[SIZE4];
   cuComplex y[SIZE4];
 
-  assert(bx * blockDim.x + tx < N / SIZE4);
+  // assert(bx * blockDim.x + tx < N / SIZE4);
 
   for (int ii = bx * blockDim.x + tx;
        ii < N / SIZE4;
