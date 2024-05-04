@@ -192,12 +192,12 @@ template<typename T>
 void Radix<T>::Execute(int alg) {
   std::cout << __FUNCTION__ << std::endl;
 
-  Timer ti;
-  ti.start();
+  // Timer ti;
+  // ti.start();
   GPUKernel(d_x_, N_, M_, alg);
-  ti.stop();
+  // ti.stop();
   printf("Alg %d: ", alg);
-  printf("Operating Time(millsec): %f\n", ti.elapsedTime_ms());
+  // printf("Operating Time(millsec): %f\n", ti.elapsedTime_ms());
   
 	gpuErrchk( cudaGetLastError() );
 	gpuErrchk( cudaDeviceSynchronize() );

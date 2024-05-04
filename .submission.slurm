@@ -9,7 +9,7 @@
 #lspci -vvv |& grep "NVIDIA" |& tee slurm-lspci.rjob_out
 
 # Run All Algorithms Once
-./install/bin/Radix2Test 
+./install/bin/Radix2Test
 
 # Run All Algorithms 100 Times:
 # ./install/bin/Radix2Test 100 1

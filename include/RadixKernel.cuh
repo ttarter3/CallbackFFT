@@ -220,7 +220,8 @@ __global__ void Radix2Mult1st(cuComplex* in, const unsigned int N, unsigned int 
 {
   unsigned int x[SIZE2];
   cuComplex y[SIZE2];
-  __shared__ cuComplex shared_data[TILE_SIZE * SIZE2];
+
+  __shared__ cuComplex shared_data[TILE_SIZE * SIZE2 * SIZE2];
 
   for (int ii = bx * blockDim.x + tx;
        ii < N / SIZE2;
@@ -239,16 +240,16 @@ __global__ void Radix2Mult1st(cuComplex* in, const unsigned int N, unsigned int 
         float angle = -2 * M_PI * ((N / (M * SIZE2)) * ii - (N / SIZE2) * (ii / M)) / N;
         cuComplex weight = make_cuComplex(cos(angle), sin(angle));
 
-        y[0] =      shared_data[x[0] % (SIZE2 * TILE_SIZE)];
-        y[1] = Mult(shared_data[x[1] % (SIZE2 * TILE_SIZE)], weight);
+        y[0] =      shared_data[x[0] % (TILE_SIZE * SIZE2 * SIZE2)];
+        y[1] = Mult(shared_data[x[1] % (TILE_SIZE * SIZE2 * SIZE2)], weight);
 
-        shared_data[x[0] % (SIZE2 * TILE_SIZE)] = Add(y[0], y[1]);
-        shared_data[x[1] % (SIZE2 * TILE_SIZE)] = Sub(y[0], y[1]);
+        shared_data[x[0] % (TILE_SIZE * SIZE2 * SIZE2)] = Add(y[0], y[1]);
+        shared_data[x[1] % (TILE_SIZE * SIZE2 * SIZE2)] = Sub(y[0], y[1]);
         __syncthreads();
       }
       
-      in[x[0]] = shared_data[x[0] % (SIZE2 * TILE_SIZE)];
-      in[x[1]] = shared_data[x[1] % (SIZE2 * TILE_SIZE)];
+      in[x[0]] = shared_data[x[0] % (TILE_SIZE * SIZE2 * SIZE2)];
+      in[x[1]] = shared_data[x[1] % (TILE_SIZE * SIZE2 * SIZE2)];
 
       __syncthreads();
   }
